@@ -6,7 +6,16 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import os
 from datetime import datetime
-from solver import load_data, preprocess_data, preprocess_shunting_costs, create_and_solve_model
+from solver2 import load_data, preprocess_data_with_reasons, preprocess_shunting_costs, solve_primary_assignment
+
+# --- Metro Lines Configuration ---
+METRO_LINES = {
+    "Line A (Short: 20km)": 250,
+    "Line B (Medium: 40km)": 450, 
+    "Line C (Long: 60km)": 650,
+    "Line D (Express: 80km)": 900,
+    "Line E (Long Express: 100km)": 1100,
+}
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -245,6 +254,12 @@ if 'data_frames' not in st.session_state:
     st.session_state.data_frames = None
 if 'scenario' not in st.session_state:
     st.session_state.scenario = None
+if 'selected_line' not in st.session_state:
+    st.session_state.selected_line = None
+if 'eligibility_details' not in st.session_state:
+    st.session_state.eligibility_details = None
+if 'required_hours' not in st.session_state:
+    st.session_state.required_hours = None
 
 # --- Header Section (Redesigned) ---
 st.markdown("""
@@ -268,6 +283,23 @@ with st.sidebar:
             index=scenarios.index('bottleneck_case') if 'bottleneck_case' in scenarios else 0,
             help="Choose the operational scenario to optimize"
         )
+        
+        st.markdown("---")
+        
+        # Line Selection
+        st.markdown("#### 🚇 Metro Line Selection")
+        selected_line = st.selectbox(
+            "Select Target Line for Optimization",
+            list(METRO_LINES.keys()),
+            help="Choose the metro line to optimize train assignments for"
+        )
+        
+        # Display line characteristics
+        line_distance = METRO_LINES[selected_line]
+        avg_line_distance = sum(METRO_LINES.values()) / len(METRO_LINES)
+        line_type = "Long Line" if line_distance >= avg_line_distance else "Short Line"
+        
+        st.info(f"📏 **{selected_line}**: {line_distance}km daily distance ({line_type})")
         
         st.markdown("---")
         
@@ -309,14 +341,17 @@ if run_optimization and selected_scenario:
         data_frames = load_data(selected_scenario)
         
         if data_frames:
-            eligibility_dict = preprocess_data(data_frames)
+            eligibility_details = preprocess_data_with_reasons(data_frames)
             shunting_costs_dict = preprocess_shunting_costs(data_frames.get("layout_costs"))
-            solution_df = create_and_solve_model(data_frames, eligibility_dict, shunting_costs_dict)
+            solution_dict, required_hours = solve_primary_assignment(data_frames, eligibility_details, shunting_costs_dict)
             
-            if solution_df is not None:
-                st.session_state.optimization_results = solution_df
+            if solution_dict is not None:
+                st.session_state.optimization_results = solution_dict
                 st.session_state.data_frames = data_frames
                 st.session_state.scenario = selected_scenario
+                st.session_state.selected_line = selected_line
+                st.session_state.eligibility_details = eligibility_details
+                st.session_state.required_hours = required_hours
                 st.success("✅ Optimization completed successfully!")
             else:
                 st.error("❌ No feasible solution found. Please check constraints.")
@@ -325,8 +360,17 @@ if run_optimization and selected_scenario:
 
 # Display Results
 if st.session_state.optimization_results is not None:
-    solution_df = st.session_state.optimization_results
+    solution_dict = st.session_state.optimization_results
     data_frames = st.session_state.data_frames
+    selected_line = st.session_state.selected_line
+    eligibility_details = st.session_state.eligibility_details
+    required_hours = st.session_state.required_hours
+    
+    # Convert solution dict to DataFrame for compatibility
+    solution_df = pd.DataFrame([
+        {"Trainset ID": train_id, "Assigned Status": status} 
+        for train_id, status in solution_dict.items()
+    ])
     
     # --- Key Metrics Dashboard ---
     st.markdown("## 📈 Key Performance Indicators")
@@ -369,7 +413,7 @@ if st.session_state.optimization_results is not None:
     st.markdown("---")
     
     # --- Centered Tabbed Interface ---
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["🚊 Fleet Status", "📊 Analytics", "🔍 Detailed View", "⚠️ Alerts", "📋 Reports"])
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🚊 Fleet Status", "📊 Analytics", "🎯 Line Recommendations", "📋 Detailed View", "⚠️ Alerts", "📋 Reports"])
     
     with tab1:
         st.markdown("### Fleet Assignment Overview")
@@ -516,7 +560,152 @@ if st.session_state.optimization_results is not None:
                 """, unsafe_allow_html=True)
     
     with tab3:
-        st.markdown("### 🔍 Detailed Train Information")
+        st.markdown(f"### 🎯 Train Recommendations for {selected_line}")
+        
+        # Generate train recommendations similar to solver2.py logic
+        all_trains_details = []
+        avg_fleet_mileage = data_frames["trainsets"]["cumulative_mileage_km"].mean()
+        today = datetime.now().date()
+        
+        for train_id, status in solution_dict.items():
+            train_data = data_frames["trainsets"][data_frames["trainsets"]["trainset_id"] == train_id].iloc[0]
+            mileage = train_data["cumulative_mileage_km"]
+            mileage_vs_avg = ((mileage - avg_fleet_mileage) / avg_fleet_mileage) * 100
+            
+            pending_work_hrs = required_hours.get(train_id, 0)
+            
+            # Get next certificate expiry
+            future_certs = data_frames['certificates'][
+                (data_frames['certificates']['trainset_id'] == train_id) & 
+                (data_frames['certificates']['expiry_date'] >= today)
+            ]
+            next_cert_expiry = future_certs['expiry_date'].min() if not future_certs.empty else "N/A"
+
+            all_trains_details.append({
+                'id': train_id, 
+                'status': status, 
+                'mileage': mileage, 
+                'mileage_vs_avg': mileage_vs_avg,
+                'pending_work_hrs': pending_work_hrs,
+                'next_cert_expiry': next_cert_expiry,
+                'eligibility': eligibility_details[train_id]
+            })
+
+        # Sort trains based on line characteristics
+        service_trains = [t for t in all_trains_details if t['status'] == 'Revenue Service']
+        standby_trains = [t for t in all_trains_details if t['status'] == 'Standby']
+        maintenance_trains = [t for t in all_trains_details if t['status'] == 'Maintenance']
+        
+        line_distance = METRO_LINES[selected_line]
+        avg_line_distance = sum(METRO_LINES.values()) / len(METRO_LINES)
+        is_long_line = line_distance >= avg_line_distance
+        
+        # Sort based on line characteristics
+        if is_long_line:
+            service_trains.sort(key=lambda x: x['mileage'])  # Low mileage first for long lines
+            sort_logic = "Low Mileage trains prioritized (better for long routes)"
+        else:
+            service_trains.sort(key=lambda x: x['mileage'], reverse=True)  # High mileage first for short lines
+            sort_logic = "High Mileage trains prioritized (better for short routes)"
+
+        standby_trains.sort(key=lambda x: x['mileage'])
+        maintenance_trains.sort(key=lambda x: x['mileage'])
+        final_ranked_list = service_trains + standby_trains + maintenance_trains
+        
+        # Display line information
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.info(f"**Line Distance**: {line_distance}km daily")
+        with col2:
+            st.info(f"**Line Type**: {'Long Line' if is_long_line else 'Short Line'}")
+        with col3:
+            st.info(f"**Strategy**: {sort_logic}")
+        
+        st.markdown("---")
+        
+        # Display ranked recommendations
+        st.markdown("#### 🏆 Ranked Train Recommendations")
+        
+        # Create a detailed dataframe for display
+        display_data = []
+        for i, train in enumerate(final_ranked_list, 1):
+            # Generate reasoning
+            reason = ""
+            if not train['eligibility']['is_eligible']:
+                reason = train['eligibility']['reason']
+            elif train['status'] == 'Revenue Service':
+                mileage_status = "Low Mileage" if train['mileage'] < avg_fleet_mileage else "High Mileage"
+                reason = f"Ready for service ({mileage_status})"
+            elif train['status'] == 'Maintenance':
+                reason = f"Scheduled maintenance ({int(train['pending_work_hrs'])} hrs)"
+            elif train['status'] == 'Standby':
+                if train['mileage'] > avg_fleet_mileage:
+                    reason = "Eligible, held for fleet balancing (high mileage)"
+                else:
+                    reason = "Eligible operational spare"
+
+            expiry_str = str(train['next_cert_expiry']) if train['next_cert_expiry'] != "N/A" else "N/A"
+            
+            # Status color coding
+            if train['status'] == 'Revenue Service':
+                status_display = "🟢 Revenue Service"
+            elif train['status'] == 'Standby':
+                status_display = "🟡 Standby"
+            else:
+                status_display = "🔴 Maintenance"
+            
+            display_data.append({
+                "Rank": i,
+                "Train ID": train['id'],
+                "Status": status_display,
+                "Mileage vs Avg": f"{train['mileage_vs_avg']:+.1f}%",
+                "Next Cert Expiry": expiry_str,
+                "Pending Work": f"{int(train['pending_work_hrs'])} hrs",
+                "Reasoning": reason
+            })
+        
+        # Display as dataframe with enhanced formatting
+        recommendations_df = pd.DataFrame(display_data)
+        
+        st.dataframe(
+            recommendations_df,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Rank": st.column_config.NumberColumn("Rank", width="small"),
+                "Train ID": st.column_config.TextColumn("Train ID", width="medium"),
+                "Status": st.column_config.TextColumn("Status", width="medium"),
+                "Mileage vs Avg": st.column_config.TextColumn("Mileage vs Avg", width="small"),
+                "Next Cert Expiry": st.column_config.TextColumn("Next Cert Expiry", width="medium"),
+                "Pending Work": st.column_config.TextColumn("Pending Work", width="small"),
+                "Reasoning": st.column_config.TextColumn("Reasoning", width="large")
+            }
+        )
+        
+        # Summary statistics for the line
+        st.markdown("---")
+        st.markdown("#### 📈 Line Assignment Summary")
+        
+        col1, col2, col3, col4 = st.columns(4)
+        
+        ready_for_line = len([t for t in service_trains])
+        with col1:
+            st.metric("Ready for Service", ready_for_line, f"Top {min(3, ready_for_line)} recommended")
+            
+        avg_ready_mileage = sum(t['mileage'] for t in service_trains) / len(service_trains) if service_trains else 0
+        with col2:
+            st.metric("Avg Service Mileage", f"{avg_ready_mileage:,.0f} km", "For active trains")
+            
+        backup_available = len(standby_trains)
+        with col3:
+            st.metric("Backup Available", backup_available, "Reserve capacity")
+            
+        total_maintenance_hours = sum(t['pending_work_hrs'] for t in maintenance_trains)
+        with col4:
+            st.metric("Maintenance Backlog", f"{total_maintenance_hours:.0f} hrs", f"{len(maintenance_trains)} trains")
+
+    with tab4:
+        st.markdown("### 📋 Detailed Train Information")
         
         # Search and Filter
         col1, col2, col3 = st.columns([2, 1, 1])
@@ -533,6 +722,20 @@ if st.session_state.optimization_results is not None:
             display_df = display_df[display_df['Trainset ID'].str.contains(search_train, case=False)]
         if filter_status != "All":
             display_df = display_df[display_df['Assigned Status'] == filter_status]
+        
+        # Add detailed reasoning if available
+        if show_reasoning:
+            reasoning_data = []
+            for _, row in display_df.iterrows():
+                train_id = row['Trainset ID']
+                eligibility = eligibility_details.get(train_id, {})
+                if not eligibility.get('is_eligible', False):
+                    reason = eligibility.get('reason', 'Unknown issue')
+                else:
+                    reason = "Eligible for service operations"
+                reasoning_data.append(reason)
+            
+            display_df['Detailed Reasoning'] = reasoning_data
         
         # Display table
         if show_reasoning and 'Detailed Reasoning' in display_df.columns:
@@ -565,7 +768,7 @@ if st.session_state.optimization_results is not None:
         # Summary stats
         st.markdown(f"**Showing {len(display_df)} of {len(solution_df)} trains**")
     
-    with tab4:
+    with tab5:
         st.markdown("### ⚠️ Operational Alerts & Notifications")
         
         col1, col2 = st.columns(2)
@@ -622,7 +825,7 @@ if st.session_state.optimization_results is not None:
             else:
                 st.success("✅ No trains in maintenance queue")
     
-    with tab5:
+    with tab6:
         st.markdown("### 📋 Reports & Export Options")
         
         col1, col2, col3 = st.columns(3)
@@ -698,7 +901,7 @@ else:
     <div style="text-align: center; padding: 3rem 1rem;">
         <h2 style="color: #6366f1; font-size: 2.2rem; margin-bottom: 1rem;">Welcome to KMRL AI Train Scheduler</h2>
         <p style="font-size: 1.15rem; color: #64748b; margin: 2rem auto; max-width: 600px;">
-            Optimize your fleet operations with AI-powered scheduling. Select a scenario and click 'Optimize' to generate an intelligent train induction plan.
+            Optimize your fleet operations with AI-powered scheduling. Select a scenario and target line, then click 'Optimize' to generate an intelligent train induction plan.
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -723,7 +926,6 @@ else:
         </div>
         """, unsafe_allow_html=True)
 
-    # --- THIS IS THE COMPLETED SECTION ---
     with col3:
         st.markdown("""
         <div class="feature-card">
@@ -732,4 +934,3 @@ else:
             <p style="color: #64748b;">Monitor critical issues like expired certs and jobs</p>
         </div>
         """, unsafe_allow_html=True)
-    # --- END OF COMPLETED SECTION ---
