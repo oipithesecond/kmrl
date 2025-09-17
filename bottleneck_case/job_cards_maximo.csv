@@ -1,0 +1,22 @@
+job_card_id,trainset_id,status,is_critical,description,required_man_hours
+MAXIMO-84321,KMRL-T12,CLOSED,False,Interior deep clean,11
+MAXIMO-84322,KMRL-T12,OPEN,False,Interior deep clean,12
+MAXIMO-84323,KMRL-T06,OPEN,True,Brake pad inspection,12
+MAXIMO-84324,KMRL-T03,CLOSED,False,Interior deep clean,5
+MAXIMO-84325,KMRL-T20,OPEN,True,Brake pad inspection,12
+MAXIMO-84326,KMRL-T20,OPEN,True,Brake pad inspection,11
+MAXIMO-84327,KMRL-T20,OPEN,False,Interior deep clean,16
+MAXIMO-84328,KMRL-T02,OPEN,True,Brake pad inspection,4
+MAXIMO-84329,KMRL-T02,OPEN,False,Interior deep clean,7
+MAXIMO-84330,KMRL-T08,OPEN,True,Brake pad inspection,7
+MAXIMO-84331,KMRL-T08,OPEN,True,Brake pad inspection,15
+MAXIMO-84332,KMRL-T08,OPEN,False,Interior deep clean,7
+MAXIMO-84333,KMRL-T21,OPEN,False,Interior deep clean,10
+MAXIMO-84334,KMRL-T25,OPEN,True,Brake pad inspection,11
+MAXIMO-84335,KMRL-T11,CLOSED,False,Interior deep clean,15
+MAXIMO-84336,KMRL-T11,CLOSED,False,Interior deep clean,6
+MAXIMO-84337,KMRL-T04,OPEN,True,Brake pad inspection,14
+MAXIMO-84338,KMRL-T14,CLOSED,False,Interior deep clean,5
+MAXIMO-84339,KMRL-T14,OPEN,True,Brake pad inspection,15
+MAXIMO-84340,KMRL-T14,OPEN,False,Interior deep clean,11
+MAXIMO-84341,KMRL-T07,OPEN,True,Brake pad inspection,7

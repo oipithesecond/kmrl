@@ -1,0 +1,6 @@
+job_card_id,trainset_id,status,is_critical,description,required_man_hours
+MAXIMO-84321,KMRL-T04,CLOSED,False,Interior deep clean,6
+MAXIMO-84322,KMRL-T04,CLOSED,False,Interior deep clean,14
+MAXIMO-84323,KMRL-T04,CLOSED,False,Interior deep clean,5
+MAXIMO-84324,KMRL-T05,OPEN,False,Interior deep clean,14
+MAXIMO-84325,KMRL-T05,OPEN,False,Interior deep clean,6

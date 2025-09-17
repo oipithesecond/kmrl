@@ -1,0 +1,13 @@
+from_location,to_location,shunting_cost
+Arrival_Track_1,IBL_Bay_1,10
+Arrival_Track_1,IBL_Bay_2,15
+Arrival_Track_1,Stabling_Track_A1,5
+Arrival_Track_2,IBL_Bay_3,10
+Arrival_Track_2,IBL_Bay_4,15
+Arrival_Track_2,Stabling_Track_B1,5
+IBL_Bay_1,Stabling_Track_A1,20
+IBL_Bay_1,Stabling_Track_A2,25
+IBL_Bay_2,Stabling_Track_A3,20
+IBL_Bay_2,Stabling_Track_B1,30
+IBL_Bay_3,Stabling_Track_B2,20
+IBL_Bay_4,Stabling_Track_B3,20
