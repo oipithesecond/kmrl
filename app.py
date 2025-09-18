@@ -413,9 +413,89 @@ if st.session_state.optimization_results is not None:
     st.markdown("---")
     
     # --- Centered Tabbed Interface ---
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🚊 Fleet Status", "📊 Analytics", "🎯 Line Recommendations", "📋 Detailed View", "⚠️ Alerts", "📋 Reports"])
+    tab_editor, tab_status, tab_analytics, tab_reco, tab_detail, tab_alerts, tab_reports = st.tabs([
+        "📝 Data Editor", "🚊 Fleet Status", "📊 Analytics", "🎯 Line Recommendations", "📋 Detailed View", "⚠️ Alerts", "📋 Reports"
+    ])
+
+# --- New Tab: Data Editor ---
+    with tab_editor:
+        st.markdown("### 📝 Custom Scenario Builder")
+        st.info(
+            "Use this panel to create or edit your own scenario. "
+            "The data is saved into a folder named `test_case`, which you can then select in the sidebar to run an optimization."
+        )
+
+        TEST_CASE_DIR = 'test_case'
+        # Use 'simple_case' as a starting template if 'test_case' doesn't exist
+        TEMPLATE_DIR = 'simple_case' 
+        
+        DATA_FILES = {
+            "trainsets": "trainsets_master.csv",
+            "certificates": "fitness_certificates.csv",
+            "job_cards": "job_cards_maximo.csv",
+            "slas": "branding_slas.csv",
+            "resources": "depot_resources.csv",
+            "layout_costs": "depot_layout_costs.csv"
+        }
+
+        # Load data from test_case or the template directory
+        loaded_data = {}
+        source_dir_display = ""
+        for key, filename in DATA_FILES.items():
+            # Prefer test_case if it exists, otherwise fall back to template
+            load_dir = TEST_CASE_DIR if os.path.exists(os.path.join(TEST_CASE_DIR, filename)) else TEMPLATE_DIR
+            source_dir_display = load_dir # For displaying message to user
+            try:
+                filepath = os.path.join(load_dir, filename)
+                loaded_data[key] = pd.read_csv(filepath)
+            except FileNotFoundError:
+                st.error(f"Template file not found: {os.path.join(TEMPLATE_DIR, filename)}")
+                loaded_data[key] = pd.DataFrame() # Fallback to empty DataFrame
+
+        st.caption(f"Currently displaying data loaded from the `{source_dir_display}` directory. Edit below and save to update `test_case`.")
+        st.markdown("---")
+
+        # Create data editors for each file within an expander
+        edited_data = {}
+        with st.expander("Trainsets Master (`trainsets_master.csv`)", expanded=True):
+            edited_data['trainsets'] = st.data_editor(
+                loaded_data['trainsets'], num_rows="dynamic", use_container_width=True, key="editor_trainsets"
+            )
+        with st.expander("Fitness Certificates (`fitness_certificates.csv`)"):
+            edited_data['certificates'] = st.data_editor(
+                loaded_data['certificates'], num_rows="dynamic", use_container_width=True, key="editor_certs"
+            )
+        with st.expander("Job Cards (`job_cards_maximo.csv`)"):
+            edited_data['job_cards'] = st.data_editor(
+                loaded_data['job_cards'], num_rows="dynamic", use_container_width=True, key="editor_jobs"
+            )
+        with st.expander("Branding SLAs (`branding_slas.csv`)"):
+            edited_data['slas'] = st.data_editor(
+                loaded_data['slas'], num_rows="dynamic", use_container_width=True, key="editor_slas"
+            )
+        with st.expander("Depot Resources (`depot_resources.csv`)"):
+            edited_data['resources'] = st.data_editor(
+                loaded_data['resources'], num_rows="dynamic", use_container_width=True, key="editor_resources"
+            )
+        with st.expander("Depot Layout Costs (`depot_layout_costs.csv`)"):
+            edited_data['layout_costs'] = st.data_editor(
+                loaded_data['layout_costs'], num_rows="dynamic", use_container_width=True, key="editor_layout"
+            )
+
+        st.markdown("---")
+        
+        # Save button logic
+        if st.button("💾 Save Data to 'test_case'", type="primary", use_container_width=True):
+            with st.spinner("Saving your custom data..."):
+                os.makedirs(TEST_CASE_DIR, exist_ok=True)
+                for key, df in edited_data.items():
+                    filepath = os.path.join(TEST_CASE_DIR, DATA_FILES[key])
+                    df.to_csv(filepath, index=False)
+            st.success(f"✅ Data saved successfully to the `{TEST_CASE_DIR}` folder!")
+            st.info("The scenario is now ready. Select `test_case` from the sidebar and click 'Optimize'.")
+            # Optional: you can add st.rerun() to automatically refresh the page
     
-    with tab1:
+    with tab_status:
         st.markdown("### Fleet Assignment Overview")
         
         # Create three columns for different statuses
@@ -463,7 +543,7 @@ if st.session_state.optimization_results is not None:
             else:
                 st.info("No trains in maintenance")
     
-    with tab2:
+    with tab_analytics:
         st.markdown("### 📊 Operational Analytics")
         
         col1, col2 = st.columns(2)
@@ -559,7 +639,7 @@ if st.session_state.optimization_results is not None:
                 </div>
                 """, unsafe_allow_html=True)
     
-    with tab3:
+    with tab_reco:
         st.markdown(f"### 🎯 Train Recommendations for {selected_line}")
         
         # Generate train recommendations similar to solver2.py logic
@@ -704,7 +784,7 @@ if st.session_state.optimization_results is not None:
         with col4:
             st.metric("Maintenance Backlog", f"{total_maintenance_hours:.0f} hrs", f"{len(maintenance_trains)} trains")
 
-    with tab4:
+    with tab_detail:
         st.markdown("### 📋 Detailed Train Information")
         
         # Search and Filter
@@ -768,7 +848,7 @@ if st.session_state.optimization_results is not None:
         # Summary stats
         st.markdown(f"**Showing {len(display_df)} of {len(solution_df)} trains**")
     
-    with tab5:
+    with tab_alerts:
         st.markdown("### ⚠️ Operational Alerts & Notifications")
         
         col1, col2 = st.columns(2)
@@ -825,7 +905,7 @@ if st.session_state.optimization_results is not None:
             else:
                 st.success("✅ No trains in maintenance queue")
     
-    with tab6:
+    with tab_reports:
         st.markdown("### 📋 Reports & Export Options")
         
         col1, col2, col3 = st.columns(3)

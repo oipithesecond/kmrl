@@ -1,0 +1,6 @@
+trainset_id,cumulative_mileage_km,in_service_date,has_branding_wrap
+KMRL-T01,148339,2018-05-03,False
+KMRL-T01,109229,2018-12-21,False
+KMRL-T03,104749,2018-04-02,True
+KMRL-T04,119000,2017-11-30,False
+KMRL-T05,147450,2017-11-21,True
