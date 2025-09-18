@@ -1,4 +1,3 @@
-# app.py
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -6,6 +5,9 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import os
 from datetime import datetime
+from language_utils import load_translations, get_translator
+
+TRANSLATIONS = load_translations()
 from solver2 import load_data, preprocess_data_with_reasons, preprocess_shunting_costs, solve_primary_assignment
 
 # --- Metro Lines Configuration ---
@@ -16,6 +18,40 @@ METRO_LINES = {
     "Line D (Express: 80km)": 900,
     "Line E (Long Express: 100km)": 1100,
 }
+
+# --- Initialize Session State ---
+if 'optimization_results' not in st.session_state:
+    st.session_state.optimization_results = None
+if 'data_frames' not in st.session_state:
+    st.session_state.data_frames = None
+if 'scenario' not in st.session_state:
+    st.session_state.scenario = None
+if 'selected_line' not in st.session_state:
+    st.session_state.selected_line = None
+if 'eligibility_details' not in st.session_state:
+    st.session_state.eligibility_details = None
+if 'required_hours' not in st.session_state:
+    st.session_state.required_hours = None
+if 'lang' not in st.session_state:
+    st.session_state.lang = "en"
+
+# --- Sidebar Configuration ---
+with st.sidebar:
+    languages = {
+        "en": "English",
+        "hi": "हिंदी (Hindi)",
+        "ml": "മലയാളം (Malayalam)"
+    }
+    
+    selected_lang_display = st.selectbox(
+        "🌐 Language",
+        options=list(languages.values()),
+        index=list(languages.keys()).index(st.session_state.lang)
+    )
+    st.session_state.lang = [code for code, name in languages.items() if name == selected_lang_display][0]
+
+    # Initialize the translator for the selected language
+    t = get_translator(TRANSLATIONS, st.session_state.lang)
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -247,91 +283,68 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- Initialize Session State ---
-if 'optimization_results' not in st.session_state:
-    st.session_state.optimization_results = None
-if 'data_frames' not in st.session_state:
-    st.session_state.data_frames = None
-if 'scenario' not in st.session_state:
-    st.session_state.scenario = None
-if 'selected_line' not in st.session_state:
-    st.session_state.selected_line = None
-if 'eligibility_details' not in st.session_state:
-    st.session_state.eligibility_details = None
-if 'required_hours' not in st.session_state:
-    st.session_state.required_hours = None
-
-# --- Header Section (Redesigned) ---
-st.markdown("""
+# --- Header Section ---
+st.markdown(f"""
 <div class="main-header">
-    <h1 class="header-title">🚊 KMRL AI-Driven Train Induction Planner</h1>
-    <p class="header-subtitle">Intelligent Fleet Management & Optimization System</p>
+    <h1 class="header-title">🚊 {t("app_title")}</h1>
+    <p class="header-subtitle">{t("app_subtitle")}</p>
 </div>
 """, unsafe_allow_html=True)
 
-# --- Sidebar Configuration ---
 with st.sidebar:
-    st.markdown("### ⚙️ Configuration Panel")
+    st.markdown(f"### {t('config_panel_title')}")
     
     # Scenario Selection
-    scenarios = [d for d in os.listdir('.') if os.path.isdir(d) and d not in ['venv', '__pycache__', '.git', '.streamlit']]
+    scenarios = [d for d in os.listdir('.') if os.path.isdir(d) and d not in ['venv', '__pycache__', '.git', '.streamlit', 'locales']]
     
     if scenarios:
         selected_scenario = st.selectbox(
-            "📁 Select Scenario",
+            t("select_scenario_label"),
             scenarios,
             index=scenarios.index('bottleneck_case') if 'bottleneck_case' in scenarios else 0,
-            help="Choose the operational scenario to optimize"
+            help=t("select_scenario_help")
         )
         
         st.markdown("---")
         
         # Line Selection
-        st.markdown("#### 🚇 Metro Line Selection")
+        st.markdown(f"#### {t('metro_line_selection_header')}")
         selected_line = st.selectbox(
-            "Select Target Line for Optimization",
+            t("select_line_label"),
             list(METRO_LINES.keys()),
-            help="Choose the metro line to optimize train assignments for"
+            help=t("select_line_help")
         )
         
         # Display line characteristics
         line_distance = METRO_LINES[selected_line]
         avg_line_distance = sum(METRO_LINES.values()) / len(METRO_LINES)
-        line_type = "Long Line" if line_distance >= avg_line_distance else "Short Line"
+        line_type = t("line_type_long") if line_distance >= avg_line_distance else t("line_type_short")
         
         st.info(f"📏 **{selected_line}**: {line_distance}km daily distance ({line_type})")
-        
-        st.markdown("---")
-        
-        # Advanced Options (expandable)
-        with st.expander("🔧 Advanced Settings", expanded=False):
-            solver_timeout = st.slider("Solver Timeout (seconds)", 10, 120, 30)
-            show_detailed_logs = st.checkbox("Show Detailed Reasoning", value=False)
-            enable_what_if = st.checkbox("Enable What-If Analysis", value=False)
         
         st.markdown("---")
         
         # Action Buttons
         col1, col2 = st.columns(2)
         with col1:
-            run_optimization = st.button("🚀 Optimize", type="primary", use_container_width=True)
+            run_optimization = st.button(t("optimize_button"), type="primary", use_container_width=True)
         with col2:
-            clear_results = st.button("🔄 Clear", use_container_width=True)
+            clear_results = st.button(t("clear_button"), use_container_width=True)
         
         if clear_results:
             st.session_state.optimization_results = None
             st.session_state.data_frames = None
             st.rerun()
     else:
-        st.error("No scenario folders found! Please create a scenario folder with data files.")
+        st.error(t("no_scenario_error"))
         selected_scenario = None
         run_optimization = False
     
     st.markdown("---")
     
-    # Info Section with better styling
-    st.markdown("### 📊 System Status")
-    st.success("✅ All systems operational")
+    # Info Section
+    st.markdown(f"### {t('system_status_header')}")
+    st.success(f"✅ {t('status_operational')}")
     st.info(f"🕐 {datetime.now().strftime('%Y-%m-%d %H:%M')}")
 
 # --- Main Content Area ---
@@ -366,9 +379,8 @@ if st.session_state.optimization_results is not None:
     eligibility_details = st.session_state.eligibility_details
     required_hours = st.session_state.required_hours
     
-    # Convert solution dict to DataFrame for compatibility
     solution_df = pd.DataFrame([
-        {"Trainset ID": train_id, "Assigned Status": status} 
+        {"Trainset ID": train_id, "Assigned Status": status}
         for train_id, status in solution_dict.items()
     ])
     
@@ -383,39 +395,20 @@ if st.session_state.optimization_results is not None:
     maintenance = len(solution_df[solution_df['Assigned Status'] == 'Maintenance'])
     
     with col1:
-        st.metric(
-            label="Total Fleet",
-            value=total_trains,
-            delta=f"{in_service/total_trains*100:.1f}% operational" if total_trains > 0 else "0.0% operational"
-        )
-    
+        st.metric(label="Total Fleet", value=total_trains)
     with col2:
-        st.metric(
-            label="🟢 Revenue Service",
-            value=in_service,
-            delta=f"{in_service/total_trains*100:.0f}%" if total_trains > 0 else "0%"
-        )
-    
+        st.metric(label="🟢 Revenue Service", value=in_service)
     with col3:
-        st.metric(
-            label="🟡 Standby",
-            value=standby,
-            delta=f"{standby/total_trains*100:.0f}%" if total_trains > 0 else "0%"
-        )
-    
+        st.metric(label="🟡 Standby", value=standby)
     with col4:
-        st.metric(
-            label="🔴 Maintenance",
-            value=maintenance,
-            delta=f"{maintenance/total_trains*100:.0f}%" if total_trains > 0 else "0%"
-        )
+        st.metric(label="🔴 Maintenance", value=maintenance)
     
     st.markdown("---")
     
     # --- Centered Tabbed Interface ---
-    tab_editor, tab_status, tab_analytics, tab_reco, tab_detail, tab_alerts, tab_reports = st.tabs([
-        "📝 Data Editor", "🚊 Fleet Status", "📊 Analytics", "🎯 Line Recommendations", "📋 Detailed View", "⚠️ Alerts", "📋 Reports"
-    ])
+    tab_keys = ["tab_editor", "tab_status", "tab_analytics", "tab_reco", "tab_detail", "tab_alerts", "tab_reports"]
+    tab_labels = [t(key) for key in tab_keys]
+    tab_editor, tab_status, tab_analytics, tab_reco, tab_detail, tab_alerts, tab_reports = st.tabs(tab_labels)
 
 # --- New Tab: Data Editor ---
     with tab_editor:
